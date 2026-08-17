@@ -1,0 +1,59 @@
+# Yanan sigara malzemeleri
+
+newmtl Kagit
+Ka 0.180 0.180 0.170
+Kd 0.930 0.920 0.860
+Ks 0.080 0.080 0.070
+Ns 18.0
+illum 2
+
+newmtl Filtre
+Ka 0.160 0.070 0.018
+Kd 0.720 0.285 0.055
+Ks 0.060 0.025 0.008
+Ns 10.0
+illum 2
+
+newmtl FiltreUcu
+Ka 0.070 0.025 0.008
+Kd 0.280 0.075 0.018
+Ks 0.020 0.010 0.005
+Ns 5.0
+illum 2
+
+newmtl YanmisKagit
+Ka 0.060 0.025 0.012
+Kd 0.260 0.080 0.025
+Ks 0.025 0.010 0.005
+Ns 5.0
+illum 2
+
+newmtl Kor
+Ka 0.800 0.055 0.004
+Kd 1.000 0.120 0.015
+Ks 0.450 0.080 0.010
+Ke 1.000 0.085 0.006
+Ns 35.0
+illum 2
+
+newmtl KulAcik
+Ka 0.170 0.165 0.155
+Kd 0.610 0.590 0.550
+Ks 0.025 0.025 0.022
+Ns 4.0
+illum 2
+
+newmtl KulKoyu
+Ka 0.090 0.085 0.080
+Kd 0.350 0.335 0.315
+Ks 0.020 0.020 0.018
+Ns 3.0
+illum 2
+
+newmtl KorUcu
+Ka 0.500 0.025 0.002
+Kd 0.900 0.055 0.006
+Ks 0.180 0.035 0.004
+Ke 0.850 0.035 0.003
+Ns 20.0
+illum 2
