@@ -45,6 +45,8 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
     private GUIStyle bilgiStili;
     private GUIStyle arkaPlanStili;
     private Texture2D arkaPlanDokusu;
+    private Texture2D yagmurCizgiDokusu;
+    private float yagmurEkranYogunlugu;
 
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void OtomatikKur()
@@ -76,6 +78,8 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
             Destroy(yagmurDokusu);
         if (arkaPlanDokusu != null)
             Destroy(arkaPlanDokusu);
+        if (yagmurCizgiDokusu != null)
+            Destroy(yagmurCizgiDokusu);
     }
 
     private void SahneYuklendi(Scene sahne, LoadSceneMode mod)
@@ -123,6 +127,16 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
         sonrakiHavaZamani = Time.unscaledTime + havaSuresi;
         bildirimBitisZamani = Time.unscaledTime + 4f;
 
+        // WebGL'de ilk karelerde particle shader'i gec derlenebiliyor. Hava
+        // yagmura alindigi anda hazir bir damla grubu baslatmak, oyuncunun
+        // yagmuru hemen gormesini garanti eder.
+        if (yeniHava == HavaTuru.Yagmurlu && yagmur != null)
+        {
+            if (!yagmur.isPlaying)
+                yagmur.Play(true);
+            yagmur.Emit(320);
+        }
+
         if (aninda)
             GecisiUygula(1000f);
     }
@@ -167,9 +181,9 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
         ana.simulationSpace = ParticleSystemSimulationSpace.World;
         ana.startLifetime = new ParticleSystem.MinMaxCurve(1.6f, 2.2f);
         ana.startSpeed = 0f;
-        ana.startSize = new ParticleSystem.MinMaxCurve(0.025f, 0.055f);
-        ana.startColor = new Color(0.65f, 0.8f, 1f, 0.75f);
-        ana.maxParticles = 4500;
+        ana.startSize = new ParticleSystem.MinMaxCurve(0.07f, 0.13f);
+        ana.startColor = new Color(0.72f, 0.86f, 1f, 0.9f);
+        ana.maxParticles = 6000;
 
         ParticleSystem.ShapeModule sekil = yagmur.shape;
         sekil.enabled = true;
@@ -187,13 +201,17 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
 
         ParticleSystemRenderer cizici = yagmur.GetComponent<ParticleSystemRenderer>();
         cizici.renderMode = ParticleSystemRenderMode.Stretch;
-        cizici.velocityScale = 0.08f;
-        cizici.lengthScale = 5f;
+        cizici.velocityScale = 0.12f;
+        cizici.lengthScale = 10f;
         cizici.sortingOrder = 100;
+        cizici.minParticleSize = 0.004f;
+        cizici.maxParticleSize = 0.08f;
 
-        Shader shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+        // Sprites/Default WebGL build'lerinde alfa karisimiyla en kararli
+        // calisan secenektir. URP particle shader'i bulunursa yedek olarak kalir.
+        Shader shader = Shader.Find("Sprites/Default");
+        if (shader == null) shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
         if (shader == null) shader = Shader.Find("Particles/Standard Unlit");
-        if (shader == null) shader = Shader.Find("Sprites/Default");
 
         if (shader != null)
         {
@@ -293,6 +311,9 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
             float mevcut = salim.rateOverTime.constant;
             salim.rateOverTime = Mathf.Lerp(mevcut, hedef.yagmurMiktari, t);
         }
+
+        float ekranHedefi = Mathf.Clamp01(hedef.yagmurMiktari / 1450f);
+        yagmurEkranYogunlugu = Mathf.Lerp(yagmurEkranYogunlugu, ekranHedefi, t);
     }
 
     private static HavaAyari AyarlariAl(HavaTuru hava)
@@ -373,6 +394,8 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
 
     private void OnGUI()
     {
+        YagmurPerdesiniCiz();
+
         if (Time.unscaledTime > bildirimBitisZamani)
             return;
 
@@ -387,6 +410,40 @@ public sealed class TaylanHavaSistemi : MonoBehaviour
             "\n1-5: hava sec  |  F6: otomatik " + (otomatikDegisim ? "acik" : "kapali"),
             bilgiStili
         );
+    }
+
+    private void YagmurPerdesiniCiz()
+    {
+        if (yagmurEkranYogunlugu < 0.015f || Event.current.type != EventType.Repaint)
+            return;
+
+        if (yagmurCizgiDokusu == null)
+        {
+            yagmurCizgiDokusu = new Texture2D(1, 1, TextureFormat.RGBA32, false);
+            yagmurCizgiDokusu.name = "Hava Sistemi - Ekran Yagmuru";
+            yagmurCizgiDokusu.SetPixel(0, 0, Color.white);
+            yagmurCizgiDokusu.Apply();
+        }
+
+        Matrix4x4 oncekiMatris = GUI.matrix;
+        Color oncekiRenk = GUI.color;
+        GUIUtility.RotateAroundPivot(-7f, new Vector2(Screen.width * 0.5f, Screen.height * 0.5f));
+
+        float zaman = Time.unscaledTime * 920f;
+        int damlaSayisi = Mathf.RoundToInt(Mathf.Lerp(55f, 185f, yagmurEkranYogunlugu));
+        for (int i = 0; i < damlaSayisi; i++)
+        {
+            float x = Mathf.Repeat(i * 83.71f + (i % 9) * 19.3f, Screen.width + 180f) - 90f;
+            float y = Mathf.Repeat(i * 47.37f + zaman * (0.82f + (i % 7) * 0.035f), Screen.height + 180f) - 90f;
+            float uzunluk = 22f + (i % 8) * 6f;
+            float genislik = 1f + (i % 3) * 0.45f;
+            float alfa = (0.2f + (i % 5) * 0.055f) * yagmurEkranYogunlugu;
+            GUI.color = new Color(0.7f, 0.86f, 1f, alfa);
+            GUI.DrawTexture(new Rect(x, y, genislik, uzunluk), yagmurCizgiDokusu);
+        }
+
+        GUI.color = oncekiRenk;
+        GUI.matrix = oncekiMatris;
     }
 
     private void GUIStilleriniHazirla()

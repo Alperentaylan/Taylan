@@ -183,6 +183,7 @@ public sealed class OyunAcilisSahnesi : MonoBehaviour
     private float yatakKameraYaw;
     private float yatakKameraPitch;
     private const float KalkisBeklemeKameraYuksekligiMetre = 0.30f;
+    private const float YatakKenarinaHizalanmaSuresi = 0.55f;
     private const float YatakKenarindaOturmaBeklemesi = 0.32f;
     private const float OturmadanAyagaGecisSuresi = 0.9f;
     private const float OtururkenYatakKenarPayi = 0.28f;
@@ -509,12 +510,10 @@ public sealed class OyunAcilisSahnesi : MonoBehaviour
         TelefonuCebeKoy();
         elIKAgirligi = 0f;
 
-        // Konusma bittikten sonra otomatik kalkma. Oyuncu hazir oldugunda
-        // ikinci kez E'ye basar; ancak o zaman mevcut YataktanKalk state'i oynar.
-        yield return new WaitForSecondsRealtime(0.2f);
-        asama = SahneAsamasi.KalkisBekliyor;
-        etkilesimText.text = "[E]  KALKMAK İÇİN BASIN";
-        etkilesimGrubu.alpha = 1f;
+        // TAYLAN_OTOMATIK_KALKIS: Telefon cebe girdikten sonra ikinci bir
+        // tus istemeden, karakteri once yatak kenarina alip kalkisi baslat.
+        yield return new WaitForSecondsRealtime(0.25f);
+        yield return KalkisSahnesiniOynat();
     }
 
     private IEnumerator KalkisSahnesiniOynat()
@@ -534,11 +533,6 @@ public sealed class OyunAcilisSahnesi : MonoBehaviour
         // olarak yatagin sol kenarina ve ardindan zemine tasinir.
         animator.applyRootMotion = false;
 
-        bool stateBasladi = YataktanKalkisiOynat();
-        // E'ye basildigi anda oynatilan state'e kamerayi bagla. Araya bir kare
-        // girip baska kamera scriptinin konumu bozmasina izin verme.
-        KalkisKameraTakibiniHazirla();
-        yield return null;
         Vector3 kalkisBaslangicPozisyonu = oyuncuKoku != null
             ? oyuncuKoku.position
             : Vector3.zero;
@@ -552,12 +546,41 @@ public sealed class OyunAcilisSahnesi : MonoBehaviour
         Vector3 yataginSolunaYon = KalkisSolYonunuBul(kalkisHedefRotasyonu);
         Vector3 oturmaHedefPozisyonu = kalkisHedefPozisyonu -
             yataginSolunaYon * OtururkenYatakKenarPayi;
-        // Oturma boyunca karakter henuz zemine dusmez; yalniz yatagin sol
-        // kenarina gelir. Y ekseni ancak ayaga kalkma gecisinde zemine iner.
+        // Oturma pozu yatak yuksekliginde kalir; zemin yuksekligine ancak
+        // son ayaga kalkma gecisinde inilir.
         oturmaHedefPozisyonu.y = kalkisBaslangicPozisyonu.y;
         Quaternion oturmaHedefRotasyonu = Quaternion.LookRotation(
             yataginSolunaYon,
             Vector3.up);
+
+        // TAYLAN_YATAK_KENARI_HIZASI: Animasyon henuz baslamadan kok
+        // yatagin koselerine savrulmadan tek hatta dogru kenara hizalanir.
+        KalkisKameraTakibiniHazirla();
+        float hizalamaGecen = 0f;
+        while (hizalamaGecen < YatakKenarinaHizalanmaSuresi)
+        {
+            hizalamaGecen += Time.deltaTime;
+            float hizalama = Mathf.SmoothStep(
+                0f,
+                1f,
+                Mathf.Clamp01(hizalamaGecen / YatakKenarinaHizalanmaSuresi));
+            if (oyuncuKoku != null)
+            {
+                oyuncuKoku.SetPositionAndRotation(
+                    Vector3.Lerp(kalkisBaslangicPozisyonu, oturmaHedefPozisyonu, hizalama),
+                    Quaternion.Slerp(kalkisBaslangicRotasyonu, oturmaHedefRotasyonu, hizalama));
+            }
+            yield return null;
+        }
+
+        if (oyuncuKoku != null)
+            oyuncuKoku.SetPositionAndRotation(oturmaHedefPozisyonu, oturmaHedefRotasyonu);
+
+        // Verilen YataktanKalk animasyonu artik yatagin dogru kenarinda
+        // baslar; once govdeyi kaldirir, sonra Idle gecisi ayaga tamamlar.
+        bool stateBasladi = YataktanKalkisiOynat();
+        KalkisKameraTakibiniHazirla();
+        yield return null;
 
         int kalkisHash = Animator.StringToHash(yataktanKalkStateAdi);
         float gecen = 0f;
@@ -621,24 +644,13 @@ public sealed class OyunAcilisSahnesi : MonoBehaviour
                 sonKlipIlerlemesi = Mathf.Clamp01(gecen / azamiSure);
             }
 
-            // FBX yatistan oturmaya gecerken oyuncu kokunu tek bir kontrollu
-            // hat uzerinde yatagin SOL kenarina getir. Serbest root motion,
-            // diagonal ucus veya her kare farkli hedef yoktur.
-            float kenaraGecis = Mathf.SmoothStep(
-                0f,
-                1f,
-                Mathf.InverseLerp(0.06f, 0.88f, sonKlipIlerlemesi));
+            // TAYLAN_KENARDA_GOVDE_KALKISI: Koku artik kaydirma; FBX
+            // burada sabit yatak kenarinda govdeyi yatistan oturmaya getirir.
             if (oyuncuKoku != null)
             {
                 oyuncuKoku.SetPositionAndRotation(
-                    Vector3.Lerp(
-                        kalkisBaslangicPozisyonu,
-                        oturmaHedefPozisyonu,
-                        kenaraGecis),
-                    Quaternion.Slerp(
-                        kalkisBaslangicRotasyonu,
-                        oturmaHedefRotasyonu,
-                        kenaraGecis));
+                    oturmaHedefPozisyonu,
+                    oturmaHedefRotasyonu);
             }
 
             yield return null;
@@ -718,6 +730,8 @@ public sealed class OyunAcilisSahnesi : MonoBehaviour
         // Intro kamera takibi burada biter; bundan sonra normal FPS sistemi
         // kamerayi yonetir ve Animator normal idle state'inde kalir.
         asama = SahneAsamasi.Bitti;
+        // TAYLAN_HARITAYI_BASLAT: Mini harita yalniz intro bittikten sonra acilir.
+        TaylanGtaHarita.OynanisiBaslat();
         yield return GorevGoster();
         acilisTamamlandi?.Invoke();
     }
