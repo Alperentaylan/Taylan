@@ -1,0 +1,40 @@
+name: Publish CV game
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Web build release tag
+        required: true
+        default: cv-preview-20260907
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download built game
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.release }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern cv-web.zip --dir package
+          mkdir site
+          unzip -q package/cv-web.zip -d site
+          test -f site/index.html
+          test -f site/build-version.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - name: Deploy current game
+        id: deployment
+        uses: actions/deploy-pages@v4
